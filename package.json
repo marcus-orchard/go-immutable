@@ -2,8 +2,12 @@
 	"name": "go-immutable",
 	"displayName": "Go Immutable",
 	"description": "Generates getter and wither methods for immutable go structures",
+	"license": "MIT",
 	"publisher": "MarcusOrchard",
-	"repository": "https://github.com/marcus-orchard/go-immutable",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/marcus-orchard/go-immutable.git"
+	},
 	"version": "0.0.1",
 	"engines": {
 		"vscode": "^1.51.0"

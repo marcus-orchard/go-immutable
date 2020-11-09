@@ -5,7 +5,7 @@ The goal of this extension is to aid building immutable data structures in Golan
 ## Features
 Generates Get and With methods for immutable go data structures
 
-![example](example1.webp)
+![example1](example1.webp)
 
 ## Release Notes
 
