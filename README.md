@@ -10,8 +10,7 @@ Generates Get and With methods for immutable go data structures
 ## Release Notes
 
 
-### 0.0.1
+### 0.0.1 - 0.0.2
 
 Initial release adds support for get and with methods
-
 
