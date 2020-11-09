@@ -5,12 +5,12 @@ The goal of this extension is to aid building immutable data structures in Golan
 ## Features
 Generates Get and With methods for immutable go data structures
 
-![example1](example1.webp)
+![example1](https://raw.githubusercontent.com/marcus-orchard/go-immutable/main/example1.webp)
 
 ## Release Notes
 
 
-### 0.0.1 - 0.0.2
+### 0.0.1 - 0.0.3
 
 Initial release adds support for get and with methods
 
