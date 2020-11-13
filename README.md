@@ -14,3 +14,7 @@ Generates Get and With methods for immutable go data structures
 
 Initial release adds support for get and with methods
 
+### 0.0.4
+
+Handle maps
+

@@ -64,7 +64,6 @@ function GeneratorGetWith(sinfo: StructInfo, stype: GeneratorType) {
 
         let gtypechar = typeCharMap.get(stype) as string;
         let regexFunction = `^func {0,}\\(.+${sinfo.Name} {0,}\\) {0,}[${gtypechar}]et([a-zA-Z_]+) {0,}\\(`;
-        // console.log(regexFunction);
         let existsStructFunctions: Set<string> = new Set<string>();
         for (let n = 0; n < editor.document.lineCount; n++) {
             let line = editor.document.lineAt(n);
@@ -132,6 +131,17 @@ function GeneratorGetWith(sinfo: StructInfo, stype: GeneratorType) {
                                                     `\n// ${withFunc} returns a copy with the ${arrType} at the given index of ${keyNameLower}\n${structString} ${withFunc}(i int, item ${arrType}) ${this.info.Name} {\n\t${sname}${field.Parent}${field.Name} = append(${sname}${field.Parent}${field.Name}[:i], append([]${arrType}{item}, ${sname}${field.Parent}${field.Name}[i+1:]...)...)\n\treturn ${sname}\n}\n`
                                                 )
                                                 editor.insertSnippet(withSS, new vscode.Position(this.info.Range[1] + 1, 0))
+                                            } else if (field.Type.slice(0, 4) == "map["){
+                                                let mapTypes = getKeyValue(field.Type)
+                                                let keyType = mapTypes[0]
+                                                let valueType = mapTypes[1]
+          
+                                                let withFunc = `With${keyName}`
+                                                let withSS = new vscode.SnippetString(
+                                                    `\n// ${withFunc} returns a copy with the ${valueType} with the given key ${keyType}\n${structString} ${withFunc}(key ${keyType}, value ${valueType}) ${this.info.Name} {\n\t${sname}${field.Parent}${field.Name}[key] = value\n\treturn ${sname}\n}\n`
+                                                )
+                                                editor.insertSnippet(withSS, new vscode.Position(this.info.Range[1] + 1, 0))
+
                                             } else {
                                                 let prefix = "With";
                                                 let setFunction = prefix + functionName;
@@ -157,6 +167,16 @@ function GeneratorGetWith(sinfo: StructInfo, stype: GeneratorType) {
                                                 let atFunc = `${keyNameSingular}At`
                                                 let atSS = new vscode.SnippetString(
                                                     `\n// ${atFunc} returns the ${keyNameSingularLower} of type ${arrType} at the requested index\n${structString} ${atFunc}(i int) ${field.Type.substring(2)} {\n\treturn ${sname}${field.Parent}${field.Name}[i]\n}\n`
+                                                )
+                                                editor.insertSnippet(atSS, new vscode.Position(this.info.Range[1] + 1, 0))
+                                            } else if (field.Type.slice(0, 4) == "map["){
+                                                let mapTypes = getKeyValue(field.Type)
+                                                let keyType = mapTypes[0]
+                                                let valueType = mapTypes[1]
+
+                                                let atFunc = `${keyNameSingular}At`
+                                                let atSS = new vscode.SnippetString(
+                                                    `\n// ${atFunc} returns the ${keyNameSingularLower} of type ${valueType} at the requested key\n${structString} ${atFunc}(key ${keyType}) ${valueType} {\n\treturn ${sname}${field.Parent}${field.Name}[key]\n}\n`
                                                 )
                                                 editor.insertSnippet(atSS, new vscode.Position(this.info.Range[1] + 1, 0))
                                             } else {
@@ -295,6 +315,29 @@ function getFieldRange(editor: vscode.TextEditor, pair: string[], startline: num
     }
 
     return end;
+}
+
+function getKeyValue(fieldType: string): string[] {
+    let keyType = ""
+    let bracketClose = 5
+    let openBrackets = 1
+    for(var i=4; i<fieldType.length;i++) {
+        let currentChar = fieldType[i]
+        if (currentChar === "]") {
+            openBrackets--
+            if (openBrackets == 0) {
+                bracketClose = i+1
+                break
+            }
+        } else if (currentChar === "[") {
+            openBrackets++
+        } else {
+            keyType = keyType + currentChar
+        }
+    }
+    let valueType = fieldType.slice(bracketClose, fieldType.length)
+
+    return [keyType, valueType]
 }
 
 export { commandSetterGetter };
