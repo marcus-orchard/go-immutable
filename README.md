@@ -18,3 +18,6 @@ Initial release adds support for get and with methods
 
 Handle maps
 
+### 0.0.5
+
+Add method to get map keys

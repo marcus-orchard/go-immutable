@@ -179,6 +179,13 @@ function GeneratorGetWith(sinfo: StructInfo, stype: GeneratorType) {
                                                     `\n// ${atFunc} returns the ${keyNameSingularLower} of type ${valueType} at the requested key\n${structString} ${atFunc}(key ${keyType}) ${valueType} {\n\treturn ${sname}${field.Parent}${field.Name}[key]\n}\n`
                                                 )
                                                 editor.insertSnippet(atSS, new vscode.Position(this.info.Range[1] + 1, 0))
+
+                                                let getFunc = `Get${keyNameSingular}Keys`
+                                                let getSS = new vscode.SnippetString(
+                                                    `\n// ${getFunc} returns the ${keyType} keys of ${keyNameSingularLower} of type ${valueType}\n${structString} ${getFunc}() []${keyType} {\n\tkeys := make([]${keyType}, len(${sname}${field.Parent}${field.Name}))\n\ti := 0\n\tfor k := range ${sname}${field.Parent}${field.Name} {\n\t\tkeys[i] = k \n\t\ti++\n\t} \n\treturn keys\n}\n`
+                                                )
+                                                editor.insertSnippet(getSS, new vscode.Position(this.info.Range[1] + 1, 0))
+
                                             } else {
                                                 let prefix = "Get";
                                                 let getFunction = prefix + functionName;
