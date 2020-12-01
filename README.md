@@ -21,3 +21,7 @@ Handle maps
 ### 0.0.5
 
 Add method to get map keys
+
+### 0.0.6
+
+Add method to append to end of slice

@@ -126,11 +126,18 @@ function GeneratorGetWith(sinfo: StructInfo, stype: GeneratorType) {
                                             if (field.Type[0] == "[") {
                                                 let arrType = field.Type.substring(2)
 
-                                                let withFunc = `With${keyNameSingular}At`
+                                                let withAtFunc = `With${keyNameSingular}At`
+                                                let withAtSS = new vscode.SnippetString(
+                                                    `\n// ${withAtFunc} returns a copy with the ${arrType} at the given index of ${keyNameLower}\n${structString} ${withAtFunc}(i int, item ${arrType}) ${this.info.Name} {\n\t${sname}${field.Parent}${field.Name} = append(${sname}${field.Parent}${field.Name}[:i], append([]${arrType}{item}, ${sname}${field.Parent}${field.Name}[i+1:]...)...)\n\treturn ${sname}\n}\n`
+                                                )
+                                                editor.insertSnippet(withAtSS, new vscode.Position(this.info.Range[1] + 1, 0))
+
+                                                let withFunc = `With${keyNameSingular}`
                                                 let withSS = new vscode.SnippetString(
-                                                    `\n// ${withFunc} returns a copy with the ${arrType} at the given index of ${keyNameLower}\n${structString} ${withFunc}(i int, item ${arrType}) ${this.info.Name} {\n\t${sname}${field.Parent}${field.Name} = append(${sname}${field.Parent}${field.Name}[:i], append([]${arrType}{item}, ${sname}${field.Parent}${field.Name}[i+1:]...)...)\n\treturn ${sname}\n}\n`
+                                                    `\n// ${withFunc} returns a copy with the ${arrType} appended\n${structString} ${withFunc}(item ${arrType}) ${this.info.Name} {\n\t${sname}${field.Parent}${field.Name} = append(${sname}${field.Parent}${field.Name}, item)\n\treturn ${sname}\n}\n`
                                                 )
                                                 editor.insertSnippet(withSS, new vscode.Position(this.info.Range[1] + 1, 0))
+                                                
                                             } else if (field.Type.slice(0, 4) == "map["){
                                                 let mapTypes = getKeyValue(field.Type)
                                                 let keyType = mapTypes[0]
