@@ -50,6 +50,10 @@ class Field {
     Name: string;
     Range: number[];
     Key: string;
+    IsArray: boolean;
+    IsMap: boolean;
+    ProperName: string;
+    SingularName: string;
 
     constructor(parent: string, type: string, name: string, range: number[]) {
         this.Parent = parent;
@@ -57,6 +61,15 @@ class Field {
         this.Name = name;
         this.Range = range;
         this.Key = (this.Parent.substr(1) + this.Name[0].toUpperCase() + this.Name.substr(1)).replace(new RegExp("\\.", "g"), "");
+        this.IsArray = type[0] == "["
+        this.IsMap = type.length > 4 && type.slice(0, 4) == "map["
+        this.ProperName =  this.Name[0].toUpperCase() + this.Name.substr(1);
+
+        let singular = this.ProperName
+        if (singular.slice(singular.length - 1) == "s") {
+            singular = singular.slice(0, -1)
+        }
+        this.SingularName = singular
     }
 
     toString(): string {

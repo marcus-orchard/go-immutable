@@ -1,22 +1,25 @@
-
-
 import { stringify } from 'querystring';
 import * as vscode from 'vscode';
-// import { Provider } from './codeAction';
 import { StructInfo, Field, GeneratorType, SelectedDecorationType} from './base';
 import { GetPatternRange } from './utils';
 
 let typeMap = new Map<string, GeneratorType>();
-let typeCharMap = new Map<GeneratorType, string>();
-
-
 
 typeMap.set("Getter", GeneratorType.Getter);
 typeMap.set("Wither", GeneratorType.Wither);
-typeCharMap.set(GeneratorType.Getter, "G");
-typeCharMap.set(GeneratorType.Wither, "W");
-typeCharMap.set(GeneratorType.Getter | GeneratorType.Wither, "GW");
+ 
+enum FuncType {
+    None = 0,
+    Get = 1 << 0,
+    With = 1 << 1,
+    WithAt = 1 << 2,
+    At = 1 << 3,
+    Keys = 1 << 4,
+    Num = 1 << 5
+}
 
+let fieldDataByFunc: Map<string, [string, FuncType]> = new Map();
+let strikesPerField: Map<string, FuncType> = new Map();
 
 function commandSetterGetter() {
     // Display a message box to the user
@@ -40,6 +43,29 @@ function commandSetterGetter() {
                     }
                 });
                 if (sinfo) {
+                    fieldDataByFunc = new Map()
+                    strikesPerField = new Map()
+                    sinfo.Fields.forEach((field: Field, name: string) => {
+                        let proper = field.ProperName
+                        let singular = field.SingularName
+                        if (field.IsArray) {
+                            fieldDataByFunc.set(numFunc(proper), [name, FuncType.Num])
+                            fieldDataByFunc.set(atFunc(singular), [name, FuncType.At])
+                            fieldDataByFunc.set(withAtFunc(singular), [name, FuncType.WithAt])
+                            fieldDataByFunc.set(withFunc(singular), [name, FuncType.With])
+                            strikesPerField.set(name, FuncType.Num | FuncType.At | FuncType.WithAt | FuncType.With)
+                        } else if (field.IsMap) {
+                            fieldDataByFunc.set(atFunc(singular), [name, FuncType.At])
+                            fieldDataByFunc.set(keysFunc(singular), [name, FuncType.Keys])
+                            fieldDataByFunc.set(withFunc(singular), [name, FuncType.With])
+                            strikesPerField.set(name, FuncType.At | FuncType.Keys | FuncType.With)
+                        } else {
+                            fieldDataByFunc.set(getFunc(singular), [name, FuncType.Get])
+                            fieldDataByFunc.set(withFunc(singular), [name, FuncType.With])
+                            strikesPerField.set(name, FuncType.Get | FuncType.With)
+                        }
+                    });
+
                     GeneratorGetWith(sinfo, gtype);
                 }
             }
@@ -50,10 +76,9 @@ function commandSetterGetter() {
             }
         });
     } else {
-        vscode.window.showErrorMessage("there is no struct(go) to focus. please move cursor in the code of struct.");
+        vscode.window.showErrorMessage("There is no struct(go) in focus. Please place cursor in the code of a struct.");
     }
 }
-
 
 function GeneratorGetWith(sinfo: StructInfo, stype: GeneratorType) {
 
@@ -62,34 +87,37 @@ function GeneratorGetWith(sinfo: StructInfo, stype: GeneratorType) {
     let editor = vscode.window.activeTextEditor;
     if (editor !== undefined) {
 
-        let gtypechar = typeCharMap.get(stype) as string;
-        let regexFunction = `^func {0,}\\(.+${sinfo.Name} {0,}\\) {0,}[${gtypechar}]et([a-zA-Z_]+) {0,}\\(`;
-        let existsStructFunctions: Set<string> = new Set<string>();
+        let regexFunction = `^func {0,}\\(.+${sinfo.Name} {0,}\\) {0,} ([a-zA-Z_]+) {0,}\\(`;
         for (let n = 0; n < editor.document.lineCount; n++) {
             let line = editor.document.lineAt(n);
             let matches = line.text.match(regexFunction);
             if (matches !== null) {
-                existsStructFunctions.add(matches[1]);
+                let fieldData = fieldDataByFunc.get(matches[1])
+                if (fieldData) {
+                    let strikes = strikesPerField.get(fieldData[0])
+                    if (strikes) {
+                        strikesPerField.set(fieldData[0], strikes&~fieldData[1])
+                    }  
+                }
             }
         }
 
-        const options = <vscode.QuickPickOptions>{ canPickMany: true, placeHolder: "select the fields that would be generator get with" };
+        const options = <vscode.QuickPickOptions>{ canPickMany: true, placeHolder: "Select the fields that need functions" };
         var items: vscode.QuickPickItem[] = [];
 
         var obj = {
             info: sinfo,
-            exists: existsStructFunctions,
-
             fields2items: function () {
                 this.info.Fields.forEach((value, key) => {
-                    if (this.exists.has(key)) {
-                        vscode.window.showInformationMessage("Get" + key + " or With" + key + " Exists");
-                    } else {
+                    let strikes = strikesPerField.get(key)
+                    if (strikes) {
                         items.push(<vscode.QuickPickItem>{
                             label: value.toString(),
                             detail: this.info.Name,
                             description: key,
                         });
+                    } else {
+                        vscode.window.showInformationMessage(`All possiible options already exist for ${key}`);
                     }
                 });
             },
@@ -97,7 +125,7 @@ function GeneratorGetWith(sinfo: StructInfo, stype: GeneratorType) {
             pick: function () {
                 this.fields2items();
                 if (items.length) {
-                    vscode.window.showQuickPick(items, options).then((item) => {
+                    vscode.window.showQuickPick(items.reverse(), options).then((item) => {
                         if (item) {
                             let fields = item as any as vscode.QuickPickItem[];
                             let sname = getAbbreviation(this.info.Name) as string;
@@ -107,102 +135,112 @@ function GeneratorGetWith(sinfo: StructInfo, stype: GeneratorType) {
                                 let field = this.info.Fields.get(qitem.description as string);
 
                                 if (field) {
+                                    let funcFlags = strikesPerField.get(field.Key)
+                                    let resolvedFlags = 0b0
+                                    if (funcFlags) {
+                                        resolvedFlags = funcFlags
+                                    }
 
-                                    let editor = vscode.window.activeTextEditor;
-                                    if (editor) {
+                                    if (resolvedFlags) {
+                                        let editor = vscode.window.activeTextEditor;
+                                        if (editor) {
+    
+                                            let proper = field.ProperName
+                                            let keyNameLower = proper[0].toLowerCase() + proper.slice(1);
+                                            let singular = field.SingularName
+                                            let keyNameSingularLower = singular[0].toLowerCase() + singular.slice(1);
+    
+                                            // With
+                                            if (stype & GeneratorType.Wither) {
+                                                if (field.IsArray) {
+                                                    let arrType = field.Type.substring(2)
+                                                    if (resolvedFlags&FuncType.WithAt){
+                                                        let func = withAtFunc(singular)
+                                                        let withAtSS = new vscode.SnippetString(
+                                                            `\n// ${func} returns a copy with the ${arrType} at the given index of ${keyNameLower}\n${structString} ${func}(i int, item ${arrType}) ${this.info.Name} {\n\t${sname}${field.Parent}${field.Name} = append(${sname}${field.Parent}${field.Name}[:i], append([]${arrType}{item}, ${sname}${field.Parent}${field.Name}[i+1:]...)...)\n\treturn ${sname}\n}\n`
+                                                        )
+                                                        editor.insertSnippet(withAtSS, new vscode.Position(this.info.Range[1] + 1, 0))
+                                                    }
 
-                                        let keyName = field.Name[0].toUpperCase() + field.Name.substr(1);
-                                        let keyNameLower = keyName[0].toLowerCase() + keyName.slice(1);
-                                        let keyNameSingular = keyName
-                                        if (keyNameSingular.slice(keyNameSingular.length - 1) == "s") {
-                                            keyNameSingular = keyNameSingular.slice(0, -1)
-                                        }
-                                        let keyNameSingularLower = keyNameSingular[0].toLowerCase() + keyNameSingular.slice(1);
-
-                                        let functionName = field.Parent.replace(new RegExp("\\.", "g"), "") + keyName;
-
-                                        // With
-                                        if (stype & GeneratorType.Wither) {
-                                            if (field.Type[0] == "[") {
-                                                let arrType = field.Type.substring(2)
-
-                                                let withAtFunc = `With${keyNameSingular}At`
-                                                let withAtSS = new vscode.SnippetString(
-                                                    `\n// ${withAtFunc} returns a copy with the ${arrType} at the given index of ${keyNameLower}\n${structString} ${withAtFunc}(i int, item ${arrType}) ${this.info.Name} {\n\t${sname}${field.Parent}${field.Name} = append(${sname}${field.Parent}${field.Name}[:i], append([]${arrType}{item}, ${sname}${field.Parent}${field.Name}[i+1:]...)...)\n\treturn ${sname}\n}\n`
-                                                )
-                                                editor.insertSnippet(withAtSS, new vscode.Position(this.info.Range[1] + 1, 0))
-
-                                                let withFunc = `With${keyNameSingular}`
-                                                let withSS = new vscode.SnippetString(
-                                                    `\n// ${withFunc} returns a copy with the ${arrType} appended\n${structString} ${withFunc}(item ${arrType}) ${this.info.Name} {\n\t${sname}${field.Parent}${field.Name} = append(${sname}${field.Parent}${field.Name}, item)\n\treturn ${sname}\n}\n`
-                                                )
-                                                editor.insertSnippet(withSS, new vscode.Position(this.info.Range[1] + 1, 0))
-                                                
-                                            } else if (field.Type.slice(0, 4) == "map["){
-                                                let mapTypes = getKeyValue(field.Type)
-                                                let keyType = mapTypes[0]
-                                                let valueType = mapTypes[1]
-          
-                                                let withFunc = `With${keyName}`
-                                                let withSS = new vscode.SnippetString(
-                                                    `\n// ${withFunc} returns a copy with the ${valueType} with the given key ${keyType}\n${structString} ${withFunc}(key ${keyType}, value ${valueType}) ${this.info.Name} {\n\t${sname}${field.Parent}${field.Name}[key] = value\n\treturn ${sname}\n}\n`
-                                                )
-                                                editor.insertSnippet(withSS, new vscode.Position(this.info.Range[1] + 1, 0))
-
-                                            } else {
-                                                let prefix = "With";
-                                                let setFunction = prefix + functionName;
-                                                let params = `(${field.Name} ${field.Type})`;
-                                                let comment = `\n// ${setFunction} returns a copy with the given ${field.Type} ${field.Name}`;
-                                                let ss = new vscode.SnippetString(
-                                                    `${comment}\n${structString} ${setFunction}${params} ${this.info.Name}{\n\t${sname}${field.Parent}${field.Name} = ${field.Name}\n\treturn ${sname}\n}\n`);
-                                                editor.insertSnippet(ss, new vscode.Position(this.info.Range[1] + 1, 0));
+                                                    if (resolvedFlags&FuncType.With){
+                                                        let func2 = withFunc(singular) 
+                                                        let withSS = new vscode.SnippetString(
+                                                            `\n// ${func2} returns a copy with the ${arrType} appended\n${structString} ${func2}(item ${arrType}) ${this.info.Name} {\n\t${sname}${field.Parent}${field.Name} = append(${sname}${field.Parent}${field.Name}, item)\n\treturn ${sname}\n}\n`
+                                                        )
+                                                        editor.insertSnippet(withSS, new vscode.Position(this.info.Range[1] + 1, 0))
+                                                    }    
+                                                } else if (field.IsMap){
+                                                    if (resolvedFlags&FuncType.With){
+                                                        let mapTypes = getKeyValue(field.Type)
+                                                        let keyType = mapTypes[0]
+                                                        let valueType = mapTypes[1]
+                  
+                                                        let func = withFunc(singular) 
+                                                        let withSS = new vscode.SnippetString(
+                                                            `\n// ${func} returns a copy with the ${valueType} with the given key ${keyType}\n${structString} ${func}(key ${keyType}, value ${valueType}) ${this.info.Name} {\n\t${sname}${field.Parent}${field.Name}[key] = value\n\treturn ${sname}\n}\n`
+                                                        )
+                                                        editor.insertSnippet(withSS, new vscode.Position(this.info.Range[1] + 1, 0))
+                                                    }
+                                                } else {
+                                                    if (resolvedFlags&FuncType.With) {
+                                                        let func = withFunc(singular)
+                                                        let ss = new vscode.SnippetString(
+                                                            `\n// ${func} returns a copy with the given ${field.Type} ${field.Name}\n${structString} ${func}(${field.Name} ${field.Type}) ${this.info.Name}{\n\t${sname}${field.Parent}${field.Name} = ${field.Name}\n\treturn ${sname}\n}\n`);
+                                                        editor.insertSnippet(ss, new vscode.Position(this.info.Range[1] + 1, 0));
+                                                    }
+                                                }
                                             }
+    
+                                            if (stype & GeneratorType.Getter) {
+                                                if (field.IsArray) {
+                                                    let arrType = field.Type.substring(2)
+    
+                                                    if (resolvedFlags&FuncType.Num) {
+                                                        let func = numFunc(proper)
+                                                        let numSS = new vscode.SnippetString(
+                                                            `\n// ${func} returns the number of ${keyNameLower} of type ${arrType}\n${structString} ${func}() int {\n\treturn len(${sname}${field.Parent}${field.Name})\n}\n`
+                                                        )
+                                                        editor.insertSnippet(numSS, new vscode.Position(this.info.Range[1] + 1, 0))
+                                                    }
 
-                                        }
-
-                                        if (stype & GeneratorType.Getter) {
-                                            if (field.Type[0] == "[") {
-                                                let arrType = field.Type.substring(2)
-
-                                                let numFunc = `Num${keyName}`
-                                                let numSS = new vscode.SnippetString(
-                                                    `\n// ${numFunc} returns the number of ${keyNameLower} of type ${arrType}\n${structString} ${numFunc}() int {\n\treturn len(${sname}${field.Parent}${field.Name})\n}\n`
-                                                )
-                                                editor.insertSnippet(numSS, new vscode.Position(this.info.Range[1] + 1, 0))
-
-                                                let atFunc = `${keyNameSingular}At`
-                                                let atSS = new vscode.SnippetString(
-                                                    `\n// ${atFunc} returns the ${keyNameSingularLower} of type ${arrType} at the requested index\n${structString} ${atFunc}(i int) ${field.Type.substring(2)} {\n\treturn ${sname}${field.Parent}${field.Name}[i]\n}\n`
-                                                )
-                                                editor.insertSnippet(atSS, new vscode.Position(this.info.Range[1] + 1, 0))
-                                            } else if (field.Type.slice(0, 4) == "map["){
-                                                let mapTypes = getKeyValue(field.Type)
-                                                let keyType = mapTypes[0]
-                                                let valueType = mapTypes[1]
-
-                                                let atFunc = `${keyNameSingular}At`
-                                                let atSS = new vscode.SnippetString(
-                                                    `\n// ${atFunc} returns the ${keyNameSingularLower} of type ${valueType} at the requested key\n${structString} ${atFunc}(key ${keyType}) ${valueType} {\n\treturn ${sname}${field.Parent}${field.Name}[key]\n}\n`
-                                                )
-                                                editor.insertSnippet(atSS, new vscode.Position(this.info.Range[1] + 1, 0))
-
-                                                let getFunc = `Get${keyNameSingular}Keys`
-                                                let getSS = new vscode.SnippetString(
-                                                    `\n// ${getFunc} returns the ${keyType} keys of ${keyNameSingularLower} of type ${valueType}\n${structString} ${getFunc}() []${keyType} {\n\tkeys := make([]${keyType}, len(${sname}${field.Parent}${field.Name}))\n\ti := 0\n\tfor k := range ${sname}${field.Parent}${field.Name} {\n\t\tkeys[i] = k \n\t\ti++\n\t} \n\treturn keys\n}\n`
-                                                )
-                                                editor.insertSnippet(getSS, new vscode.Position(this.info.Range[1] + 1, 0))
-
-                                            } else {
-                                                let prefix = "Get";
-                                                let getFunction = prefix + functionName;
-                                                let comment = `\n// ${getFunction} returns the ${field.Type} ${field.Name} \n`;
-                                                let ss = new vscode.SnippetString(`${comment}${structString} ${getFunction}() ${field.Type} {\n\treturn ${sname}${field.Parent}${field.Name}\n}\n`);
-                                                editor.insertSnippet(ss, new vscode.Position(this.info.Range[1] + 1, 0));
+                                                    if (resolvedFlags&FuncType.At) {
+                                                        let func2 = atFunc(singular)
+                                                        let atSS = new vscode.SnippetString(
+                                                            `\n// ${func2} returns the ${keyNameSingularLower} of type ${arrType} at the requested index\n${structString} ${func2}(i int) ${field.Type.substring(2)} {\n\treturn ${sname}${field.Parent}${field.Name}[i]\n}\n`
+                                                        )
+                                                        editor.insertSnippet(atSS, new vscode.Position(this.info.Range[1] + 1, 0))
+                                                    }
+                                                } else if (field.IsMap){
+                                                    let mapTypes = getKeyValue(field.Type)
+                                                    let keyType = mapTypes[0]
+                                                    let valueType = mapTypes[1]
+    
+                                                    if (resolvedFlags&FuncType.At) {
+                                                        let func = atFunc(singular) 
+                                                        let atSS = new vscode.SnippetString(
+                                                            `\n// ${func} returns the ${keyNameSingularLower} of type ${valueType} at the requested key\n${structString} ${func}(key ${keyType}) ${valueType} {\n\treturn ${sname}${field.Parent}${field.Name}[key]\n}\n`
+                                                        )
+                                                        editor.insertSnippet(atSS, new vscode.Position(this.info.Range[1] + 1, 0))
+                                                    }
+             
+                                                    if (resolvedFlags&FuncType.Keys) {
+                                                        let func2 = keysFunc(singular) 
+                                                        let getSS = new vscode.SnippetString(
+                                                            `\n// ${func2} returns the ${keyType} keys of ${keyNameSingularLower} of type ${valueType}\n${structString} ${func2}() []${keyType} {\n\tkeys := make([]${keyType}, len(${sname}${field.Parent}${field.Name}))\n\ti := 0\n\tfor k := range ${sname}${field.Parent}${field.Name} {\n\t\tkeys[i] = k \n\t\ti++\n\t} \n\treturn keys\n}\n`
+                                                        )
+                                                        editor.insertSnippet(getSS, new vscode.Position(this.info.Range[1] + 1, 0))
+                                                    }
+                                                } else {
+                                                    if (resolvedFlags&FuncType.Get) {
+                                                        let func = getFunc(singular)
+                                                        let ss = new vscode.SnippetString(`\n// ${func} returns the ${field.Type} ${field.Name} \n${structString} ${func}() ${field.Type} {\n\treturn ${sname}${field.Parent}${field.Name}\n}\n`);
+                                                        editor.insertSnippet(ss, new vscode.Position(this.info.Range[1] + 1, 0));
+                                                    }
+                                                }
                                             }
                                         }
                                     }
-                                }
+                                    }
                             });
                         }
                     });
@@ -352,6 +390,30 @@ function getKeyValue(fieldType: string): string[] {
     let valueType = fieldType.slice(bracketClose, fieldType.length)
 
     return [keyType, valueType]
+}
+
+function numFunc(proper: string): string {
+    return `Num${proper}`
+}
+
+function atFunc(singular: string): string {
+    return `${singular}At`
+}
+
+function withAtFunc(singular: string): string {
+    return `With${singular}At`
+}
+
+function withFunc(singular: string): string {
+    return `With${singular}`
+}
+
+function keysFunc(singular: string): string {
+    return `Get${singular}Keys`
+}
+
+function getFunc(singular: string): string {
+    return `Get${singular}`
 }
 
 export { commandSetterGetter };

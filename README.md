@@ -25,3 +25,7 @@ Add method to get map keys
 ### 0.0.6
 
 Add method to append to end of slice
+
+### 0.0.7
+
+Improve existing getter/wither recognition
