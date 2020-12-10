@@ -7,25 +7,18 @@ Generates Get and With methods for immutable go data structures
 
 ![example1](https://raw.githubusercontent.com/marcus-orchard/go-immutable/main/example1.webp)
 
-## Release Notes
+**Scalar Fields**    
+*Get method* returns the value of the field    
+*With method* returns a new copy with the given field value
 
+**Arrays**    
+*Num method* Returns the length of the array    
+*At method* Returns the item at the given index    
+*WithAt method* Returns a new copy with an item at the given index    
+*With* Returns a new copy with an item appended to the end    
 
-### 0.0.1 - 0.0.3
+**Maps**    
+*At method* Returns the item at the given key    
+*Keys method* Returns all the keys of the map    
+*WithAt method* Returns a new copy with an item at the given key
 
-Initial release adds support for get and with methods
-
-### 0.0.4
-
-Handle maps
-
-### 0.0.5
-
-Add method to get map keys
-
-### 0.0.6
-
-Add method to append to end of slice
-
-### 0.0.7
-
-Improve existing getter/wither recognition
