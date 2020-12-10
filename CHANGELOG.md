@@ -27,3 +27,7 @@ Improve existing getter/wither recognition
 ### 0.0.8
 
 Add icon and improve readme
+
+### 0.0.9
+
+Made icon have transparent background
